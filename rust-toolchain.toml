@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2025 Derek Sauer
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+[toolchain]
+channel = "nightly"                       # We're using embassy-executor's nightly features
+components = ["rust-src"]
+targets = ["riscv32imc-unknown-none-elf"]
