@@ -15,7 +15,8 @@ rustflags = [
 target = "riscv32imc-unknown-none-elf"
 
 [env]
-DEFMT_LOG = "trace"
+DEFMT_LOG = "debug"
+ESP_WIFI_CONFIG_COUNTRY_CODE = "CA"
 
 [unstable]
 build-std = ["core", "alloc"]
