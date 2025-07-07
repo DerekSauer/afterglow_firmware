@@ -5,13 +5,20 @@
 //! Board support for Breadstick Innovation's Nougat C3-Mini LED
 //! controller: https://shop.breadstick.ca/products/nougat-c3-mini
 
+use bt_hci::controller::ExternalController;
 use esp_hal::clock::CpuClock;
 use esp_hal::config::{WatchdogConfig, WatchdogStatus};
+use esp_hal::gpio::{Input, InputConfig, Pull};
 use esp_hal::rmt::Rmt;
-use esp_hal::rng::{Rng, Trng};
+use esp_hal::rng::Trng;
 use esp_hal::time::Rate;
+use esp_hal::timer::systimer::SystemTimer;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{Blocking, Config, peripherals};
+use esp_wifi::ble::controller::BleConnector;
+use static_cell::make_static;
+
+type BleController = bt_hci::controller::ExternalController<BleConnector<'static>, 20>;
 
 // This board has a single output for LED light strips.
 // The user must choose one LED type or the other.
@@ -19,49 +26,45 @@ use esp_hal::{Blocking, Config, peripherals};
 compile_error!("feature `clockless_leds` and `clocked_leds` cannot be enabled a the same time");
 
 /// Breadstick Innovation's Nougat C3-Mini LED control board.
-pub struct Board<'board> {
-    /// GPIO pin connected to the "BOOT" button.
-    pub boot_button: peripherals::GPIO9<'static>,
+pub struct Board {
+    /// BLE controller.
+    ble_controller: BleController,
 
-    /// GPIO pin connected to the LED strip's data line.
-    pub led_data_pin: peripherals::GPIO0<'static>,
+    /// Push button connected to GPIO9.
+    button: esp_hal::gpio::Input<'static>,
 
     /// GPIO pin connected to the LED strip's clock line.
     #[cfg(feature = "clocked_leds")]
-    pub led_clock_pin: peripherals::GPIO1<'static>,
+    led_clock_pin: peripherals::GPIO1<'board>,
+
+    /// GPIO pin connected to the LED strip's data line.
+    led_data_pin: peripherals::GPIO0<'static>,
 
     /// Remote control transceiver.
     /// This peripheral provides hardware accelerated transmission of timing
     /// sensitive packets to a GPIO pin.
     #[cfg(feature = "clockless_leds")]
-    pub remote_control: esp_hal::rmt::Rmt<'board, Blocking>,
+    remote_control: esp_hal::rmt::Rmt<'static, Blocking>,
 
-    /// Timer dedicated to the WIFI module.
-    wifi_timer: TimerGroup<'board, peripherals::TIMG0<'static>>,
-
-    /// Random number generator dedicate to the WIFI module and BLE host.
-    rng: Trng<'board>,
-
-    /// The WIFI module will take control of radio clocks when enabled.
-    radio_clock: peripherals::RADIO_CLK<'static>,
+    /// True random number generator.
+    rng: Trng<'static>,
 }
 
-impl Board<'_> {
+impl Board {
     /// Begin constructing a new interface to our Nougat C3-Mini. Processor,
     /// clocks, and peripherals are intialized.
-    pub fn new<'board>(clock_speed: ClockSpeed) -> Board<'board> {
-        // The WIFI controller requires a heap for its own allocations.
-        // The bootloader reserves 64kb of RAM that we can reuse once the bootloader has
-        // jumped to our code. Our own code will not touch this heap.
-        // SAFETY: esp_hal's linker script for the ESP32C3 defines a 64kb memory segment
-        // called `dram2_uninit` which comprises the memory region used by the
-        // bootloader.
-        esp_alloc::heap_allocator!(#[unsafe(link_section = ".dram2_uninit")] size: 64 * 1024);
-
+    ///
+    /// # Panic
+    ///
+    /// Some peripheral drivers have potentionally fallible initialization
+    /// processes but they are required for the correct functioning of the
+    /// device. This function will panic if these peripherals cannot be
+    /// initialized.
+    pub fn init() -> Board {
         // Watchdog timers will not be needed for this application.
         let peripherals = esp_hal::init(
             Config::default()
-                .with_cpu_clock(clock_speed.into())
+                .with_cpu_clock(CpuClock::max())
                 .with_watchdog(
                     WatchdogConfig::default()
                         .with_swd(false)
@@ -71,9 +74,20 @@ impl Board<'_> {
                 ),
         );
 
-        defmt::info!("[board] mcu and peripherals initialized.");
+        // The WIFI controller requires a heap for its own allocations.
+        // The bootloader reserves 64kb of RAM that we can reuse once the bootloader has
+        // jumped to our code. Our own code will not touch this heap.
+        // SAFETY: esp_hal's linker script for the ESP32C3 defines a 64kb memory segment
+        // called `dram2_uninit` which comprises the memory region used by the
+        // bootloader.
+        esp_alloc::heap_allocator!(#[unsafe(link_section = ".dram2_uninit")] size: 64 * 1024);
 
-        let boot_button = peripherals.GPIO9;
+        let embassy_timer = SystemTimer::new(peripherals.SYSTIMER);
+        esp_hal_embassy::init(embassy_timer.alarm0);
+
+        let pull_up_input = InputConfig::default().with_pull(Pull::Up);
+        let button = Input::new(peripherals.GPIO9, pull_up_input);
+
         let led_data_pin = peripherals.GPIO0;
 
         #[cfg(feature = "clocked_leds")]
@@ -81,76 +95,40 @@ impl Board<'_> {
 
         #[cfg(feature = "clockless_leds")]
         let remote_control = {
-            let clock_rate = clock_speed.half_clock_mhz();
-            let rmt_rate = Rate::from_mhz(clock_rate);
-            match Rmt::new(peripherals.RMT, rmt_rate) {
-                Ok(rmt) => {
-                    defmt::info!(
-                        "[board] remote control peripheral configured at {}Mhz clock rate",
-                        clock_rate
-                    );
-                    rmt
-                }
-                Err(error) => {
-                    defmt::panic!("[board] could not initialize RMT peripheral: {}", error)
-                }
-            }
+            let rmt_rate = Rate::from_mhz(80);
+            Rmt::new(peripherals.RMT, rmt_rate)
+                .map_err(|err| defmt::panic!("failed to initialize the RMT peripheral: {}", err))
+                .unwrap()
         };
 
-        // Peripherals reserved for the wifi/ble stack.
-        let wifi_timer = TimerGroup::new(peripherals.TIMG0);
+        // The true random number generator uses one of the ADC peripherals as a source
+        // of thermal noise to seed the RNG peripheral.
         let rng = Trng::new(peripherals.RNG, peripherals.ADC1);
-        let radio_clock = peripherals.RADIO_CLK;
 
-        // Embassy can use the second timer group.
-        let embassy_timer = TimerGroup::new(peripherals.TIMG1);
-        esp_hal_embassy::init(embassy_timer.timer0);
+        let ble_controller = {
+            let timer_group = TimerGroup::new(peripherals.TIMG0);
+
+            let wifi_controller = make_static!(
+                esp_wifi::init(timer_group.timer0, rng.rng.clone(), peripherals.RADIO_CLK)
+                    .map_err(|err| defmt::panic!("failed to initialize wifi controller: {}", err))
+                    .unwrap()
+            );
+
+            let hci_transport =
+                esp_wifi::ble::controller::BleConnector::new(wifi_controller, peripherals.BT);
+
+            ExternalController::new(hci_transport)
+        };
 
         Board {
-            boot_button,
-            led_data_pin,
+            ble_controller,
+            button,
             #[cfg(feature = "clocked_leds")]
             led_clock_pin,
+            led_data_pin,
             #[cfg(feature = "clockless_leds")]
             remote_control,
-            wifi_timer,
             rng,
-            radio_clock,
-        }
-    }
-
-    /// Retrieve a clone of the random number generator.
-    pub fn clone_rng(&self) -> Rng {
-        self.rng.rng.clone()
-    }
-}
-
-/// The ESP32C3 processor on this board offers two clock speeds.
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
-pub enum ClockSpeed {
-    /// 80Mhz.
-    #[default]
-    Low80Mhz,
-
-    /// 160Mhz.
-    High160Mhz,
-}
-
-impl ClockSpeed {
-    /// Get half the clock speed in Mhz.
-    pub fn half_clock_mhz(&self) -> u32 {
-        match &self {
-            ClockSpeed::Low80Mhz => 40,
-            ClockSpeed::High160Mhz => 80,
-        }
-    }
-}
-
-impl From<ClockSpeed> for CpuClock {
-    fn from(value: ClockSpeed) -> Self {
-        match value {
-            ClockSpeed::Low80Mhz => CpuClock::_80MHz,
-            ClockSpeed::High160Mhz => CpuClock::_160MHz,
         }
     }
 }
