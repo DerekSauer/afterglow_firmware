@@ -20,14 +20,15 @@ harness = false
 
 [dependencies]
 # Cross platform crates.
+bt-hci = { version = "0.3.2", features = ["defmt", "embassy-time"] }
 defmt = "1.0"
 defmt-rtt = "1.0"
 embassy-executor = { version = "0.7", features = ["defmt", "nightly"] }
 embassy-futures = { version = "0.1", features = ["defmt"] }
 embassy-sync = { version = "0.7", features = ["defmt"] }
 embassy-time = { version = "0.4", features = ["defmt"] }
-static_cell = "2.1"
-trouble-host = { version = "0.1", default-features = false, features = ["default-packet-pool", "defmt", "derive", "gatt", "peripheral", "security"] }
+static_cell = { version = "2.1", features = ["nightly"] }
+trouble-host = { version = "0.2.3", default-features = false, features = ["default-packet-pool", "defmt", "derive", "gatt", "peripheral", "security"] }
 
 # ESP32 specific crates (enabled via the `esp` feature along with a chip specific `esp32xx` feature).
 esp-alloc = { version = "0.8", features = ["defmt"], optional = true }
@@ -64,20 +65,16 @@ esp32c3 = [
     "esp-wifi?/esp32c3",
 ]
 
-[patch.crates-io]
-# trouble-host is in active development and does not yet have a crates.io release
-trouble-host = { git = "https://github.com/embassy-rs/trouble.git", rev = "cb4b2cd424cdb2af54bad52922798a58d8786d7f" }
-
 [profile.release]
 codegen-units = 1
 debug = 2
 debug-assertions = false
 incremental = false
-opt-level = 3
 lto = 'fat'
+opt-level = "s"
 overflow-checks = false
 
 # ESP's documentation recommends enabling optimizations
 # even in debug builds to avoid timing problems.
 [profile.dev]
-opt-level = 2
+opt-level = "s"
