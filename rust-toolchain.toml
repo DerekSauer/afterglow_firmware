@@ -2,7 +2,8 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+# We're using the nightly features of embassy-executor and static_cell
 [toolchain]
-channel = "nightly"                       # We're using embassy-executor's nightly features
-components = ["rust-src"]
+channel = "nightly"
+components = ["rust-src", "rustfmt", "llvm-tools"]
 targets = ["riscv32imc-unknown-none-elf"]
