@@ -18,7 +18,7 @@ use esp_hal::{Blocking, Config, peripherals};
 use esp_wifi::ble::controller::BleConnector;
 use static_cell::make_static;
 
-type BleController = bt_hci::controller::ExternalController<BleConnector<'static>, 20>;
+pub type BleController = bt_hci::controller::ExternalController<BleConnector<'static>, 20>;
 
 // This board has a single output for LED light strips.
 // The user must choose one LED type or the other.

@@ -8,6 +8,7 @@
 #![no_main]
 #![no_std]
 
+mod ble;
 mod boards;
 
 use {defmt as _, defmt_rtt as _};
