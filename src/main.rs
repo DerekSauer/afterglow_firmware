@@ -10,6 +10,7 @@
 mod ble;
 mod boards;
 
+use embassy_futures::join::join;
 use {defmt as _, defmt_rtt as _};
 #[cfg(feature = "esp")]
 use {esp_alloc as _, esp_backtrace as _};
@@ -41,26 +42,28 @@ static HARDWARE_REVISION: &str = if cfg!(feature = "nougat-c3") {
 async fn main(task_spawner: embassy_executor::Spawner) {
     let mut board = Board::init();
 
-    let (gatt_server, mut peripheral_role) = ble::gatt_server::GattServer::start_server(
-        &task_spawner,
+    let ble_host = ble::BleHost::new(
         board.get_mac_address(),
         board.ble_controller,
         &mut board.rng,
     );
 
-    loop {
-        match ble::advertise::advertise::<ble::BleController>(
-            &MODEL_NUMBER,
-            &mut peripheral_role,
-            &gatt_server,
-        )
-        .await
-        {
-            Ok(connection) => gatt_server.gatt_event_loop(&connection).await.unwrap(),
-            Err(adv_error) => {
-                let wrapped_error = defmt::Debug2Format(&adv_error);
-                defmt::panic!("error while advertising: {:?}", wrapped_error);
+    let (mut peripheral, ble_runner) = ble_host.run();
+
+    let gatt_server = ble::gatt_server::GattServer::start();
+
+    let _ = join(ble::ble_task(ble_runner), async {
+        loop {
+            match ble::advertise::advertise(MODEL_NUMBER, &mut peripheral, &gatt_server).await {
+                Ok(connection) => {
+                    gatt_server.gatt_event_loop(&connection).await.unwrap();
+                }
+                Err(err) => {
+                    let wrapped_err = defmt::Debug2Format(&err);
+                    defmt::panic!("[ble] advertising error: {:?}", wrapped_err)
+                }
             }
         }
-    }
+    })
+    .await;
 }

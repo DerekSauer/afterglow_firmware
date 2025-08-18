@@ -6,14 +6,11 @@ use trouble_host::prelude::*;
 
 use super::services::device_information::DeviceInformation;
 
-pub async fn advertise<'stack, 'gatt_server, C: Controller>(
-    device_name: &'stack str,
-    peripheral_role: &mut Peripheral<'stack, super::BleController, DefaultPacketPool>,
-    gatt_server: &'gatt_server super::gatt_server::GattServer<'stack>,
-) -> Result<
-    GattConnection<'stack, 'gatt_server, DefaultPacketPool>,
-    BleHostError<super::BleHostError>,
-> {
+pub async fn advertise<'values, 'server, C: Controller>(
+    device_name: &'values str,
+    peripheral_role: &mut Peripheral<'values, C, DefaultPacketPool>,
+    gatt_server: &'server super::gatt_server::GattServer<'values>,
+) -> Result<GattConnection<'values, 'server, DefaultPacketPool>, BleHostError<C::Error>> {
     let mut advertise_data = [0; 31];
 
     AdStructure::encode_slice(

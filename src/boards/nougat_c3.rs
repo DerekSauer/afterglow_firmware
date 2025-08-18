@@ -16,12 +16,10 @@ use esp_hal::time::Rate;
 use esp_hal::timer::systimer::SystemTimer;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{Blocking, Config, peripherals};
-use esp_wifi::ble::controller::{BleConnector, BleConnectorError};
+use esp_wifi::ble::controller::BleConnector;
 use static_cell::StaticCell;
 
-pub type BleControllerImpl = bt_hci::controller::ExternalController<BleConnector<'static>, 20>;
-
-pub type BleHostErrorImpl = BleConnectorError;
+type BleController = bt_hci::controller::ExternalController<BleConnector<'static>, 20>;
 
 // This board has a single output for LED light strips.
 // The user must choose one LED type or the other.
@@ -31,7 +29,7 @@ compile_error!("feature `clockless_leds` and `clocked_leds` cannot be enabled a 
 /// Breadstick Innovation's Nougat C3-Mini LED control board.
 pub struct Board {
     /// BLE controller.
-    pub ble_controller: BleControllerImpl,
+    pub ble_controller: BleController,
 
     /// Push button connected to GPIO9.
     button: esp_hal::gpio::Input<'static>,
