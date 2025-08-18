@@ -16,10 +16,12 @@ use esp_hal::time::Rate;
 use esp_hal::timer::systimer::SystemTimer;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{Blocking, Config, peripherals};
-use esp_wifi::ble::controller::BleConnector;
+use esp_wifi::ble::controller::{BleConnector, BleConnectorError};
 use static_cell::StaticCell;
 
 pub type BleControllerImpl = bt_hci::controller::ExternalController<BleConnector<'static>, 20>;
+
+pub type BleHostErrorImpl = BleConnectorError;
 
 // This board has a single output for LED light strips.
 // The user must choose one LED type or the other.
@@ -113,8 +115,7 @@ impl Board {
                 static WIFI_CONTROLLER: StaticCell<esp_wifi::EspWifiController<'static>> =
                     StaticCell::new();
                 WIFI_CONTROLLER.init_with(|| {
-                    match esp_wifi::init(timer_group.timer0, rng.rng.clone(), peripherals.RADIO_CLK)
-                    {
+                    match esp_wifi::init(timer_group.timer0, rng.rng.clone()) {
                         Ok(wifi_controller) => wifi_controller,
                         Err(err) => defmt::panic!("failed to initialize wifi controller: {}", err),
                     }
