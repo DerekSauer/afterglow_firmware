@@ -7,7 +7,7 @@ name = "afterglow_firmware"
 version = "0.1.0"
 authors = ["Derek Sauer <dereksauer.ca@gmail.com>"]
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 description = "Firmware for the Afterglow monitor backlighting device."
 documentation = "https://github.com/dereksauer/afterglow-firmware"
 readme = "README.md"
@@ -20,7 +20,7 @@ harness = false
 
 [dependencies]
 # Cross platform crates.
-bt-hci = { version = "0.3.2", features = ["defmt", "embassy-time"] }
+bt-hci = { version = "0.3", features = ["defmt", "embassy-time"] }
 defmt = "1.0"
 defmt-rtt = "1.0"
 embassy-executor = { version = "0.7", features = ["defmt", "nightly"] }
@@ -28,18 +28,17 @@ embassy-futures = { version = "0.1", features = ["defmt"] }
 embassy-sync = { version = "0.7", features = ["defmt"] }
 embassy-time = { version = "0.4", features = ["defmt"] }
 static_cell = "2.1"
-trouble-host = { version = "0.2.3", default-features = false, features = ["default-packet-pool", "defmt", "derive", "gatt", "peripheral", "security"] }
+trouble-host = { version = "0.2", default-features = false, features = ["default-packet-pool", "defmt", "derive", "gatt", "peripheral", "security"] }
 
 # ESP32 specific crates (enabled via the `esp` feature along with a chip specific `esp32xx` feature).
 esp-alloc = { version = "0.8", features = ["defmt"], optional = true }
-esp-backtrace = { version = "0.16", features = ["defmt", "exception-handler", "panic-handler"], optional = true }
+esp-backtrace = { version = "0.17", features = ["defmt", "exception-handler", "panic-handler"], optional = true }
 esp-hal = { version = "1.0.0-beta.1", features = ["defmt", "unstable"], optional = true }
-esp-hal-embassy = { version = "0.8", features = ["defmt"], optional = true }
-esp-wifi = { version = "0.14", features = ["defmt", "ble"], optional = true }
+esp-hal-embassy = { version = "0.9", features = ["defmt"], optional = true }
+esp-wifi = { version = "0.15", features = ["defmt", "ble"], optional = true }
 
 [features]
 default = ["nougat-c3", "clockless_leds"]
-
 # Enable when building for the Breadstick Innovation's Nougat C3-Mini LED controller.
 # https://shop.breadstick.ca/products/nougat-c3-mini
 nougat-c3 = ["esp", "esp32c3"]
