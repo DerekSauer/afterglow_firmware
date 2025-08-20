@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #![feature(impl_trait_in_assoc_type)] // Needed by embassy-executor's statically allocated tasks.
+#![feature(type_alias_impl_trait)] // make_static!
 #![cfg_attr(debug_assertions, allow(dead_code, unused_variables))]
 #![no_main]
 #![no_std]
@@ -42,10 +43,10 @@ static HARDWARE_REVISION: &str = if cfg!(feature = "nougat-c3") {
 async fn main(_task_spawner: embassy_executor::Spawner) {
     let mut board = match Board::init() {
         Ok(board) => board,
-        Err(error) => defmt::panic!("Could not initialize the board: {}", error),
+        Err(error) => defmt::panic!("[mcu] could not initialize the board: {}", error),
     };
 
-    let ble_host = ble::BleHost::new(
+    let ble_host = ble::host::Host::new(
         board.get_mac_address(),
         board.ble_controller,
         &mut board.rng,
@@ -53,9 +54,12 @@ async fn main(_task_spawner: embassy_executor::Spawner) {
 
     let (mut peripheral, ble_runner) = ble_host.run();
 
-    let gatt_server = ble::gatt_server::GattServer::start(MODEL_NUMBER);
+    let gatt_server = match ble::gatt_server::GattServer::start(MODEL_NUMBER) {
+        Ok(gatt_server) => gatt_server,
+        Err(error) => defmt::panic!("[gatt] could not start the GATT server: {}", error),
+    };
 
-    let _ = join(ble::ble_task(ble_runner), async {
+    let _ = join(ble::ble_background_task(ble_runner), async {
         loop {
             match ble::advertise::advertise(MODEL_NUMBER, &mut peripheral, &gatt_server).await {
                 Ok(connection) => {
@@ -63,7 +67,7 @@ async fn main(_task_spawner: embassy_executor::Spawner) {
                 }
                 Err(err) => {
                     let wrapped_err = defmt::Debug2Format(&err);
-                    defmt::panic!("[ble] advertising error: {:?}", wrapped_err)
+                    defmt::panic!("[host] advertising error: {:?}", wrapped_err)
                 }
             }
         }

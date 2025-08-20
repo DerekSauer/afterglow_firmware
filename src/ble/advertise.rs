@@ -6,6 +6,7 @@ use trouble_host::prelude::*;
 
 use super::services::device_information::DeviceInformation;
 
+/// Begin advertising and wait for connections.
 pub async fn advertise<'values, 'server, C: Controller>(
     device_name: &'values str,
     peripheral_role: &mut Peripheral<'values, C, DefaultPacketPool>,

@@ -13,33 +13,26 @@ pub struct GattServer {
 
 impl<'values> GattServer<'values> {
     /// Start the Gatt server.
-    ///
-    /// # Panic
-    ///
-    /// This function will panic if the Gatt Server cannot be started.
-    pub fn start(device_name: &'values str) -> Self {
+    pub fn start(device_name: &'values str) -> Result<Self, &'static str> {
         let gap_config = GapConfig::Peripheral(PeripheralConfig {
             name:       &device_name,
             appearance: &appearance::light_fixtures::LIGHT_CONTROLLER,
         });
 
-        let gatt_server = match GattServer::new_with_config(gap_config) {
-            Ok(gatt_server) => gatt_server,
-            Err(err) => {
-                defmt::panic!("error while starting the Gatt server: {}", err)
-            }
-        };
-
-        gatt_server
+        Ok(GattServer::new_with_config(gap_config)?)
     }
 
+    /// Handle GATT events whenever a connection is made.
     pub async fn gatt_event_loop<'gatt_server>(
         &self,
         connection: &GattConnection<'values, 'gatt_server, DefaultPacketPool>,
     ) -> Result<(), trouble_host::Error> {
-        let _disconnect_reason = loop {
+        loop {
             match connection.next().await {
-                GattConnectionEvent::Disconnected { reason } => break reason,
+                GattConnectionEvent::Disconnected { reason } => {
+                    defmt::info!("[gatt] client disconnected, ATT code: {}", reason);
+                    break;
+                }
                 GattConnectionEvent::Gatt { event } => match event.accept() {
                     Ok(reply) => reply.send().await,
                     Err(gatt_error) => {
@@ -48,7 +41,7 @@ impl<'values> GattServer<'values> {
                 },
                 _ => {}
             }
-        };
+        }
 
         Ok(())
     }
