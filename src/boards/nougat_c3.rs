@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Board support for Breadstick Innovation's Nougat C3-Mini LED
-//! controller: https://shop.breadstick.ca/products/nougat-c3-mini
+//! controller: <https://shop.breadstick.ca/products/nougat-c3-mini>
 
 use core::error::Error;
 use core::fmt::Display;
