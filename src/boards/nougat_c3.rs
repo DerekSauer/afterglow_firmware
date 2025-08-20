@@ -5,6 +5,9 @@
 //! Board support for Breadstick Innovation's Nougat C3-Mini LED
 //! controller: https://shop.breadstick.ca/products/nougat-c3-mini
 
+use core::error::Error;
+use core::fmt::Display;
+
 use bt_hci::controller::ExternalController;
 use esp_hal::clock::CpuClock;
 use esp_hal::config::{WatchdogConfig, WatchdogStatus};
@@ -54,14 +57,7 @@ pub struct Board {
 impl Board {
     /// Begin constructing a new interface to our Nougat C3-Mini. Processor,
     /// clocks, and peripherals are intialized.
-    ///
-    /// # Panic
-    ///
-    /// Some peripheral drivers have potentionally fallible initialization
-    /// processes but they are required for the correct functioning of the
-    /// device. This function will panic if these peripherals cannot be
-    /// initialized.
-    pub fn init() -> Board {
+    pub fn init() -> Result<Board, BoardError> {
         // Watchdog timers will not be needed for this application.
         let peripherals = esp_hal::init(
             Config::default()
@@ -97,9 +93,7 @@ impl Board {
         #[cfg(feature = "clockless_leds")]
         let remote_control = {
             let rmt_rate = Rate::from_mhz(80);
-            Rmt::new(peripherals.RMT, rmt_rate)
-                .map_err(|err| defmt::panic!("failed to initialize the RMT peripheral: {}", err))
-                .unwrap()
+            Rmt::new(peripherals.RMT, rmt_rate)?
         };
 
         // The true random number generator uses one of the ADC peripherals as a source
@@ -112,12 +106,7 @@ impl Board {
             let wifi_controller = {
                 static WIFI_CONTROLLER: StaticCell<esp_wifi::EspWifiController<'static>> =
                     StaticCell::new();
-                WIFI_CONTROLLER.init_with(|| {
-                    match esp_wifi::init(timer_group.timer0, rng.rng.clone()) {
-                        Ok(wifi_controller) => wifi_controller,
-                        Err(err) => defmt::panic!("failed to initialize wifi controller: {}", err),
-                    }
-                })
+                WIFI_CONTROLLER.init(esp_wifi::init(timer_group.timer0, rng.rng.clone())?)
             };
 
             let hci_transport =
@@ -126,7 +115,7 @@ impl Board {
             ExternalController::new(hci_transport)
         };
 
-        Board {
+        Ok(Board {
             ble_controller,
             button,
             #[cfg(feature = "clocked_leds")]
@@ -135,7 +124,7 @@ impl Board {
             #[cfg(feature = "clockless_leds")]
             remote_control,
             rng,
-        }
+        })
     }
 
     /// Retrieve this board's MAC address.
@@ -144,5 +133,61 @@ impl Board {
     /// MAC address to ROM which can be used as the device's BLE public address.
     pub fn get_mac_address(&self) -> [u8; 6] {
         Efuse::mac_address()
+    }
+}
+
+#[derive(Debug)]
+pub enum BoardError {
+    Rmt(esp_hal::rmt::Error),
+    Wifi(esp_wifi::InitializationError),
+}
+
+impl Error for BoardError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            // The RMT peripheral's error type does not implement core::error::Error.
+            BoardError::Rmt(error) => None,
+            // The WIFI peripheral's error type does not implement core::error::Error.
+            BoardError::Wifi(initialization_error) => None,
+        }
+    }
+
+    fn cause(&self) -> Option<&dyn Error> {
+        self.source()
+    }
+}
+
+impl Display for BoardError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            BoardError::Rmt(error) => {
+                write!(f, "error initializing the RMT peripheral: {:?}", error)
+            }
+            BoardError::Wifi(initialization_error) => {
+                write!(
+                    f,
+                    "error initializing the WIFI controller: {:?}",
+                    initialization_error
+                )
+            }
+        }
+    }
+}
+
+impl defmt::Format for BoardError {
+    fn format(&self, fmt: defmt::Formatter) {
+        defmt::write!(fmt, "{}", self)
+    }
+}
+
+impl From<esp_hal::rmt::Error> for BoardError {
+    fn from(value: esp_hal::rmt::Error) -> Self {
+        BoardError::Rmt(value)
+    }
+}
+
+impl From<esp_wifi::InitializationError> for BoardError {
+    fn from(value: esp_wifi::InitializationError) -> Self {
+        BoardError::Wifi(value)
     }
 }

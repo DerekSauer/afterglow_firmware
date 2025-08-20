@@ -40,7 +40,10 @@ static HARDWARE_REVISION: &str = if cfg!(feature = "nougat-c3") {
 #[cfg(feature = "esp")]
 #[esp_hal_embassy::main]
 async fn main(_task_spawner: embassy_executor::Spawner) {
-    let mut board = Board::init();
+    let mut board = match Board::init() {
+        Ok(board) => board,
+        Err(error) => defmt::panic!("Could not initialize the board: {}", error),
+    };
 
     let ble_host = ble::BleHost::new(
         board.get_mac_address(),
