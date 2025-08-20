@@ -20,9 +20,9 @@ use esp_hal::timer::systimer::SystemTimer;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::{Blocking, Config, peripherals};
 use esp_wifi::ble::controller::BleConnector;
-use static_cell::StaticCell;
+use static_cell::make_static;
 
-type BleController = bt_hci::controller::ExternalController<BleConnector<'static>, 20>;
+type BleController<'board> = bt_hci::controller::ExternalController<BleConnector<'board>, 20>;
 
 // This board has a single output for LED light strips.
 // The user must choose one LED type or the other.
@@ -30,9 +30,9 @@ type BleController = bt_hci::controller::ExternalController<BleConnector<'static
 compile_error!("feature `clockless_leds` and `clocked_leds` cannot be enabled a the same time");
 
 /// Breadstick Innovation's Nougat C3-Mini LED control board.
-pub struct Board {
+pub struct Board<'board> {
     /// BLE controller.
-    pub ble_controller: BleController,
+    pub ble_controller: BleController<'board>,
 
     /// Push button connected to GPIO9.
     button: esp_hal::gpio::Input<'static>,
@@ -54,10 +54,10 @@ pub struct Board {
     pub rng: Trng<'static>,
 }
 
-impl Board {
+impl<'board> Board<'board> {
     /// Begin constructing a new interface to our Nougat C3-Mini. Processor,
     /// clocks, and peripherals are intialized.
-    pub fn init() -> Result<Board, BoardError> {
+    pub fn init() -> Result<Board<'board>, BoardError> {
         // Watchdog timers will not be needed for this application.
         let peripherals = esp_hal::init(
             Config::default()
@@ -103,14 +103,10 @@ impl Board {
         let ble_controller = {
             let timer_group = TimerGroup::new(peripherals.TIMG0);
 
-            let wifi_controller = {
-                static WIFI_CONTROLLER: StaticCell<esp_wifi::EspWifiController<'static>> =
-                    StaticCell::new();
-                WIFI_CONTROLLER.init(esp_wifi::init(timer_group.timer0, rng.rng.clone())?)
-            };
+            let wifi_controller =
+                make_static!(esp_wifi::init(timer_group.timer0, rng.rng.clone())?);
 
-            let hci_transport =
-                esp_wifi::ble::controller::BleConnector::new(wifi_controller, peripherals.BT);
+            let hci_transport = BleConnector::new(wifi_controller, peripherals.BT);
 
             ExternalController::new(hci_transport)
         };

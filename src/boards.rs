@@ -8,4 +8,4 @@
 mod nougat_c3;
 
 #[cfg(feature = "nougat-c3")]
-pub type Board = nougat_c3::Board;
+pub type Board<'board> = nougat_c3::Board<'board>;
