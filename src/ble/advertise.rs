@@ -17,7 +17,7 @@ pub async fn advertise<'values, 'server, C: Controller>(
         &[
             AdStructure::Flags(LE_GENERAL_DISCOVERABLE | BR_EDR_NOT_SUPPORTED),
             AdStructure::ServiceUuids16(&[DeviceInformation::BLE_UUID16.to_le_bytes()]),
-            AdStructure::CompleteLocalName(&crate::MODEL_NUMBER.as_bytes()),
+            AdStructure::CompleteLocalName(device_name.as_bytes()),
         ],
         &mut advertise_data[..],
     )?;

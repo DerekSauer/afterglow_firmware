@@ -17,9 +17,9 @@ impl<'values> GattServer<'values> {
     /// # Panic
     ///
     /// This function will panic if the Gatt Server cannot be started.
-    pub fn start() -> Self {
+    pub fn start(device_name: &'values str) -> Self {
         let gap_config = GapConfig::Peripheral(PeripheralConfig {
-            name:       crate::MODEL_NUMBER,
+            name:       &device_name,
             appearance: &appearance::light_fixtures::LIGHT_CONTROLLER,
         });
 
@@ -37,7 +37,7 @@ impl<'values> GattServer<'values> {
         &self,
         connection: &GattConnection<'values, 'gatt_server, DefaultPacketPool>,
     ) -> Result<(), trouble_host::Error> {
-        let disconnect_reason = loop {
+        let _disconnect_reason = loop {
             match connection.next().await {
                 GattConnectionEvent::Disconnected { reason } => break reason,
                 GattConnectionEvent::Gatt { event } => match event.accept() {

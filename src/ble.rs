@@ -21,9 +21,6 @@ const MAX_ADVERTISING_SETS: usize = 1;
 /// Two channels will be required for L2CAP transfers (Signal + ATT).
 const MAX_L2CAP_CHANNELS: usize = 2;
 
-/// Maximum size of packets sent over the L2CAP channels.
-const L2CAP_MTU: usize = 251;
-
 type BleResources =
     HostResources<DefaultPacketPool, MAX_CONNECTIONS, MAX_L2CAP_CHANNELS, MAX_ADVERTISING_SETS>;
 

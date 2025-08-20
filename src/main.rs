@@ -39,7 +39,7 @@ static HARDWARE_REVISION: &str = if cfg!(feature = "nougat-c3") {
 
 #[cfg(feature = "esp")]
 #[esp_hal_embassy::main]
-async fn main(task_spawner: embassy_executor::Spawner) {
+async fn main(_task_spawner: embassy_executor::Spawner) {
     let mut board = Board::init();
 
     let ble_host = ble::BleHost::new(
@@ -50,7 +50,7 @@ async fn main(task_spawner: embassy_executor::Spawner) {
 
     let (mut peripheral, ble_runner) = ble_host.run();
 
-    let gatt_server = ble::gatt_server::GattServer::start();
+    let gatt_server = ble::gatt_server::GattServer::start(MODEL_NUMBER);
 
     let _ = join(ble::ble_task(ble_runner), async {
         loop {
